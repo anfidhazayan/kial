@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CSO
+  ENTITY_HEAD
+  STAFF
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CertificateType {
+  AVSEC_BASIC
+  PCC
+  AEP
+  MEDICAL
+  KIAL_INTERNAL
+  AVSEC
+  POLICE_CLEARANCE
+  BCAS
+  OTHER
+}
+
+
+
+model User {
+  id            Int        @id @default(autoincrement())
+  email         String     @unique
+  passwordHash  String
+  fullName      String
+  role          Role
+  createdAt     DateTime   @default(now())
+  managedEntity      Entity?           @relation("EntityHead")
+  staffProfile       Staff?            @relation("UserProfile")
+  auditLogs          AuditLog[]
+  requestedApprovals ApprovalRequest[] @relation("RequestedApprovals")
+  reviewedApprovals  ApprovalRequest[] @relation("ReviewedApprovals")
+}
+
+model Entity {
+  id                       Int                 @id @default(autoincrement())
+  name                     String
+  externalEntityCode       String?             @unique
+  category                 String?
+  securityClearanceStatus  String?
+  securityClearanceValidTo DateTime?
+  securityProgramStatus    String?
+  securityProgramValidTo   DateTime?
+  qcpStatus                String?
+  qcpSubmissionDate        DateTime?
+  qcpValidTo               DateTime?
+  contractValidFrom        DateTime?
+  contractValidTo          DateTime?
+  ascoUserId               Int?                @unique
+  ascoUser                 User?               @relation("EntityHead", fields: [ascoUserId], references: [id])
+  ascoName                 String?
+  ascoContactNo            String?
+  ascoEmail                String?
+  ascoTrainingValidFrom    DateTime?
+  ascoTrainingValidTo      DateTime?
+  kialPocName              String?
+  kialPocNumber            String?
+  kialPocEmail             String?
+  password                 String?
+  status                   ApprovalStatus      @default(APPROVED)
+  staffMembers             Staff[]
+  certificates             EntityCertificate[]
+
+  @@index([name])
+  @@index([contractValidTo])
+}
+
+model Staff {
+  id                   Int           @id @default(autoincrement())
+  fullName             String
+  designation          String?
+  aadhaarNumber        String?
+  isKialStaff          Boolean       @default(false)
+  empCode              String?       @unique
+  department           String?
+  dateOfSuperannuation DateTime?
+  entityId             Int?
+  entity               Entity?       @relation(fields: [entityId], references: [id])
+  userId               Int?          @unique
+  user                 User?         @relation("UserProfile", fields: [userId], references: [id])
+  aepNumber            String?
+  terminals            String?
+  airportsGiven        String?
+  zones                String[]
+  phoneNumber          String?
+  password             String?
+  status               ApprovalStatus @default(APPROVED)
+  certificates         Certificate[]
+
+  @@index([entityId])
+  @@index([fullName])
+}
+
+model Certificate {
+  id                Int             @id @default(autoincrement())
+  type              String
+  issuedDate        DateTime?
+  validFrom         DateTime?
+  validTo           DateTime?
+  docUrl            String?
+  proposedValidFrom DateTime?
+  proposedValidTo   DateTime?
+  proposedDocUrl    String?
+  status            ApprovalStatus  @default(APPROVED)
+  department        String?
+  staffId           Int
+  staff             Staff           @relation(fields: [staffId], references: [id])
+
+  @@index([staffId])
+  @@index([status])
+  @@index([validTo])
+  @@index([type])
+}
+
+model EntityCertificate {
+  id        Int            @id @default(autoincrement())
+  type      String
+  validFrom DateTime?
+  validTo   DateTime?
+  docUrl    String?
+  status    ApprovalStatus @default(APPROVED)
+  entityId  Int
+  entity    Entity         @relation(fields: [entityId], references: [id])
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([entityId])
+  @@index([status])
+  @@index([validTo])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  timestamp DateTime @default(now())
+
+  @@index([timestamp(sort: Desc)])
+  @@index([userId])
+}
+
+model ApprovalRequest {
+  id          Int            @id @default(autoincrement())
+  entityType  String         // "Staff", "Entity", "Certificate", "EntityCertificate"
+  entityId    Int
+  action      String         // "CREATE", "UPDATE", "DELETE"
+  payload     Json?          // Stores proposed changes
+  status      ApprovalStatus @default(PENDING)
+  requestedBy Int
+  requester   User           @relation("RequestedApprovals", fields: [requestedBy], references: [id])
+  reviewedBy  Int?
+  reviewer    User?          @relation("ReviewedApprovals", fields: [reviewedBy], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status])
+  @@index([entityType, entityId])
+}
+
+model ConfiguredCertificateType {
+  id           Int      @id @default(autoincrement())
+  name         String   @unique
+  applicableTo String   @default("ALL") // "KIAL", "ENTITY", "ALL"
+  department   String?
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([applicableTo])
+}
